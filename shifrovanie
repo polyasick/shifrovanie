@@ -1,0 +1,48 @@
+  //отправка+шифрование
+        private void buttonSend_Click(object sender, EventArgs e)
+        {
+            RSACryptoServiceProvider RSA = new RSACryptoServiceProvider();
+ 
+            // converts from string to byte[]
+            System.Text.UnicodeEncoding enc =
+                    new System.Text.UnicodeEncoding();
+            byte[] input = new byte[1464];
+            
+            
+            byte[] output;
+
+            try
+            {
+                //msg = Encoding.UTF8.GetBytes(text_msg.Text);
+                input = enc.GetBytes(text_msg.Text); //текст сообщения разбираем по байтам
+            }
+            catch (Exception ss)
+            {
+                MessageBox.Show(ss.ToString());
+                return;
+            }
+            output = RSAEncrypt(input, publicKey, false); //зашифровываем его
+
+           
+            string msgBase64 = Convert.ToBase64String(output); //переделываем в строку без потери байт
+            byte[] data = new byte[1024];
+            data = enc.GetBytes(msgBase64); //создаем снова байт 
+            for (int i = 0; i < input.Length - 1; i++)
+            {
+                input.SetValue((byte)0, i); //не понимаю
+            }
+            for (int i = 0; i < output.Length - 1; i++)
+            {
+                output.SetValue((byte)0, i); //также не понимаю 
+            }
+
+            // sending the message
+
+            sckCommunication.Send(data);//отпраляем
+
+            // add to listbox
+            listBox1.Items.Add("You: " + text_msg.Text);
+
+            // clear txtMessage
+            text_msg.Clear();
+        }
