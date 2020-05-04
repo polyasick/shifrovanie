@@ -1,0 +1,291 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.IO;
+using System.Threading;
+
+namespace RIP
+{
+    class Program
+    {
+        public class Router //Маршрутизатор
+        {
+            public string Name { get; set; } //Имя соседа 
+            public string Port { get; set; } //Номер порта
+            public string Address { get; set; } //Адрес сетевой папки
+            public List<Route> RouteTable { get; set; } //Таблица маршрутизации соседа (список маршрутов)
+
+            public Router()
+            {
+                Name = "";
+                Port = "";
+                RouteTable = new List<Route>();
+            }
+
+            public void setEntry(string neigh) //Обработка записи из таблицы соседей
+            {
+                if (neigh != "" && neigh != "\n") //Если строка не пустая
+                {
+                    //Разбиваем строку и достаем значения из стобцов (разделитель ;)
+                    string[] cols = neigh.Split(';');
+                    Name = cols[0];
+                    Port = cols[1];
+                }
+                
+
+            }
+
+            public void setRouteTable(string textCsv) //Заполнение таблицы маршрутизации
+            {
+                string[] routeEntries = textCsv.Split('\r', '\n'); //Разделение сплошного текста на строки в таблице маршрутизации
+
+                //цикл по всем строкам таблицы маршрутизации
+                foreach (string route in routeEntries)
+                {
+                    if (route != "" && route != "\n") //Если строка не пустая
+                    {
+                        Route buff = new Route(); //Буфер для извлечения данных из строки файла 
+                        buff.setRoute(route); //Распознавание адреса, маски, порта, количества хопов
+
+                        RouteTable.Add(buff); //Добавление нового маршрута
+                    }
+                }
+            }
+
+            public void outputRT() //Вывод таблицы маршрутизации
+            {
+                //цикл по всем элемента списка маршрутов
+                foreach (Route route in RouteTable)
+                {
+                    Console.WriteLine(route.getRoute()); //Метод, возвращающий строку таблицы маршрутизации
+                }
+            }
+        }
+
+        public class Route //Запись таблицы маршрутизации (маршрут)
+        {
+            public string Network { get; set; } //Адрес сети
+            public string Mask { get; set; } //Маска
+            public string NeighName { get; set; } //Имя соседа вместо IP-адреса следующего перехода
+            public string Port { get; set; } //Порт, ведущий к сети
+            public int Hop { get; set; } //Количество хопов
+
+            public Route() { }
+
+            public void setRoute(string entry) //Обработка записи из таблицы маршрутизации
+            {
+                if (entry != "" && entry != "\n") //Если строка не пустая
+                {
+                    //Разбиваем строку и достаем значения из стобцов (разделитель ;)
+                    string[] cols = entry.Split(';');
+                    Network = cols[0];
+                    Mask = cols[1];
+                    NeighName = cols[2];
+                    Port = cols[3];
+                    convertHop(cols[4]); //Преобразуем значение метрики в целое число
+                }
+            }
+
+            public void convertHop(string hop) //Преобразование значения считанной строки в число метрики
+            {
+                try { Hop = Int32.Parse(hop); }
+                catch { Console.WriteLine("Ошибка сетевого администратора. Неверный формат метрики."); }
+            }
+
+            public string getRoute() //Возвращаем строку таблицы маршрутизации в формате файла csv
+            {
+                return (Network + ";" + Mask + ";" + NeighName + ";" + Port + ";" + Hop);
+            }
+
+        }
+
+        static void Main()
+        {
+            List<string> add = new List<string>();
+
+            using (StreamReader NeighboursTableCsv = File.OpenText(@"C:\Share\Neighbourhood.csv")) //Открытие файла с таблицей соседей  
+            {
+                string neighbour; //Очередная строка в таблице соседей
+
+                //Пока не дошли до конца таблицы соседей
+                while ((neighbour = NeighboursTableCsv.ReadLine()) != null)
+                {
+                    Router Neighbour = new Router(); //Сосед
+
+                    //Из считанной записи таблицы извлекаем его имя и номер порта
+                    Neighbour.setEntry(neighbour);
+
+                    //Записываем адрес сетевой папки соседа и файла таблицы маршрутизации
+                    Neighbour.Address = @"\\" + Neighbour.Name + @"\Share\Share.csv";
+
+                    Console.WriteLine("Маршрутизатор " + Neighbour.Name);
+                    Console.WriteLine("Подключение . . . \n");
+
+                    Router Me = new Router(); //Наше устройство
+                    Me.Address = @"C:\Share\Share.csv"; //Адрес нашей таблицы маршрутизации
+
+                    //Считываем весь текст файла своей таблицы маршрутизации
+                    string myRoutes = File.ReadAllText(Me.Address, Encoding.Default);
+
+                    //Передаем весь текст файла на разбор для заполнения таблицы маршрутизации
+                    Me.setRouteTable(myRoutes);
+
+                    string routeNeigh; //Буфер для считывания записи (маршрута) из таблицы соседа
+                    bool net = false; //Параметр проверки подключения
+                    try
+                    {
+                        routeNeigh = File.ReadAllText(Neighbour.Address, Encoding.Default); //Считываем весь файл таблицы маршрутизации соседа
+
+                        //Передаем весь текст файла на разбор для заполнения таблицы маршрутизации
+                        Neighbour.setRouteTable(routeNeigh);
+
+                        Console.WriteLine("Таблица маршрутизации соседа " + Neighbour.Name + "\n");
+
+                        Neighbour.outputRT(); //Метод вывод таблицы маршрутизации
+
+                        Console.WriteLine("\nНаша таблица маршрутизации ");
+                        Me.outputRT(); //Метод вывод таблицы маршрутизации
+
+                        Console.WriteLine("\n");
+
+                    }
+                    catch (Exception e) //Если не получилось открыть файл с таблицей маршрутизации соседа
+                    {
+                        Console.WriteLine("Наша таблица маршрутизации ");
+                        Me.outputRT(); //Метод вывод таблицы маршрутизации
+
+                        Console.WriteLine(Neighbour.Name + " " + e.Message);
+
+                        net = true; //Неудачное соединение - параметр вкл
+
+                        //Так как сосед недоступен, удаляем из своей таблицы связанные с ним маршруты
+                        List<Route> buffTable = new List<Route>(); //Таблица-буфер для сохранения маршрутов 
+
+                        foreach (Route route in Me.RouteTable)
+                        {
+                            if (route.NeighName != Neighbour.Name)
+                            {
+                                buffTable.Add(route); //Добавление маршрута в буфер
+                            }
+                            else
+                            {
+                                Console.WriteLine("Маршрутизатор " + Neighbour.Name + " недоступен!");
+                                Console.WriteLine("Удаление пути из своей таблицы \n" + route.getRoute());
+                            }
+                        }
+                        if (buffTable.FirstOrDefault() != null) //Если таблица-буфер не пуста
+                            Me.RouteTable = buffTable; //Обновляем нашу таблицу маршрутизации
+
+                        buffTable = null; //Освобождаем буфер
+                                          //Открываем наш файл с таблицей маршрутизации на запись
+                        StreamWriter RouteTableCsv = new StreamWriter(Me.Address);
+
+                        //Построчно записываем маршруты в файл
+                        for (int i = 0; i < Me.RouteTable.Count; i++)
+                            if (Me.RouteTable[i] != null)
+                                RouteTableCsv.WriteLine(Me.RouteTable[i].getRoute());
+                        RouteTableCsv.Close();
+                    }
+
+                    if (!net) //Если сосед активен
+                    {
+                        Console.WriteLine("Таблица маршрутизатора " + Neighbour.Name + " : сравнение строк на совпадение с имеющимися.");
+
+                        List<Route> eqbuffTable = new List<Route>(); //Таблица-буфер для сохранения совпавших маршрутов
+
+                        foreach (Route neighRoute in Neighbour.RouteTable) //Цикл по маршрутам таблицы соседа
+                        {
+                            Console.WriteLine("Сравниваем сеть " + neighRoute.getRoute() + "\n");
+
+                            foreach (Route myRoute in Me.RouteTable) //Цикл по нашим маршрутам
+                            {
+                                //Проверка на совпадения адреса сети и маски
+                                if (neighRoute.Network == myRoute.Network && neighRoute.Mask == myRoute.Mask)
+                                {
+                                    Console.WriteLine("Сеть совпадает с записью собственной таблицы маршрутизации.");
+
+                                    //Проверка на количество хопов в маршруте соседа
+                                    if ((neighRoute.Hop + 1 <= myRoute.Hop) && (neighRoute.Hop + 1 < 16))
+                                    {
+                                        Console.WriteLine("Число хопов меньше или равно.");
+                                        Console.WriteLine("Обновление строки в собственной таблице.");
+                                        //myRoute.NeighName = Neighbour.Name;
+                                        //myRoute.Port = Neighbour.Port;
+                                        //myRoute.Hop = neighRoute.Hop + 1;
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine("Большее число хопов.");
+                                        Console.WriteLine("Сеть от маршрутизатора " + Neighbour.Name + " игнорируется. \n");
+                                    }
+                                    eqbuffTable.Add(myRoute); //Добавление маршрута в буфер
+                                }
+                            }
+
+                            if (eqbuffTable.FirstOrDefault() == null) //Если совпадения не обнаружены
+                            {
+                                Console.WriteLine("Совпадений с записями не обнаружено.");
+                                if (neighRoute.Hop + 1 < 16)
+                                {
+                                    Console.WriteLine("Добавление маршрута в нашу таблицу маршрутизации. \n");
+                                    
+                                    neighRoute.Hop = neighRoute.Hop + 1;
+                                    Me.RouteTable.Add(neighRoute);
+                                }
+                                else
+                                    Console.WriteLine("Сеть игнорируется - хопы >= 16. \n");
+                            }
+                        }
+
+                        bool eqnet = false; //Флаг: совпадение маршрутов
+
+                        foreach (Route myRoute in Me.RouteTable)
+                        {
+                            //if (a != "" && a != "\n")
+                            //RouteTableCsv.WriteLine(newRoute);
+                            foreach (Route neighRoute in Neighbour.RouteTable) //Цикл по маршрутам таблицы соседа
+                            {
+                                if (neighRoute.Network == myRoute.Network && neighRoute.Mask == myRoute.Mask)
+                                {
+                                    eqnet = true;
+                                }
+                            }
+                            if (!eqnet)
+                            {
+                                Console.WriteLine("Наш маршрут " + myRoute.getRoute() + " отсутствует на маршрутизаторе " + Neighbour.Name);
+                                Console.WriteLine("Сеть сохраняется в таблицу.");
+
+                            }
+                        }
+
+                        //Обновление нашей таблицы маршрутизации
+                        StreamWriter RouteTableCsv = new StreamWriter(Me.Address);
+                        foreach (Route newRoute in Me.RouteTable)
+                        {
+                            RouteTableCsv.WriteLine(newRoute.getRoute());
+                        }
+
+                        Console.WriteLine("\n");
+                        RouteTableCsv.Close();
+                        Neighbour = null;
+                        Me = null;
+                    }
+                }
+            }
+            Console.WriteLine("Обновление через: \n");
+            Console.ReadKey();
+
+
+            for (int i = 30; i > 0; i--) //Повторный обмен таблицами по истечении 30 секунд
+            {
+                Thread.Sleep(1000);
+                Console.WriteLine(i + " ");
+                Console.SetCursorPosition(Console.CursorLeft, Console.CursorTop - 1);
+            }
+            Console.Clear();
+            Main();
+        }
+    }
+
+}
