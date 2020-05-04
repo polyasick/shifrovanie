@@ -1,0 +1,216 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+using System.IO;
+using System.Threading;
+
+
+namespace RIP
+{
+    class Program
+    {
+        static void Main()
+        {
+            List<string> add = new List<string>();
+            using (StreamReader neighbourhood_text = File.OpenText(@"C:\Share\Neighbourhood.csv")) //открываем файл с соседями и их портами 
+            {
+                string neighbourhood;
+                while ((neighbourhood = neighbourhood_text.ReadLine()) != null)
+                {
+                    string name_neighbourhood = neighbourhood;
+                    string port = "";
+                    int indexOfChar = neighbourhood.IndexOf(";");//находим индекс ;
+                    for (int i = indexOfChar; i < neighbourhood.Length; i++) //проходимся циклом по полученной строке, начиная с ;
+                        if (char.IsDigit(neighbourhood[i])) //если цифра, то 
+                            port += neighbourhood[i];//добавляем
+                    name_neighbourhood = name_neighbourhood.Substring(0, name_neighbourhood.Length - (name_neighbourhood.Length - indexOfChar));
+                    //имя соседа 
+
+                    Console.WriteLine("Маршрутизатор " + name_neighbourhood);
+                    Console.WriteLine("Подключение . . . \n");
+
+                    string my_address = @"C:\Share\Share.csv"; //наша таблица маршрутизации
+                    string my_text = File.ReadAllText(my_address, Encoding.Default);
+                    string[] my_strings = my_text.Split('\r', '\n');
+                    string[] my_strings2 = new string[my_strings.Length];
+                    string users_address = @"\\" + name_neighbourhood + @"\Share\Share.csv";
+                    string users_text; string[] users_strings = new string[0];
+
+                    bool net = false;
+                    try
+                    {
+                        users_text = File.ReadAllText(users_address, Encoding.Default);
+                        users_strings = users_text.Split('\r', '\n');
+                        Console.WriteLine("Таблица маршрутизации соседа " + name_neighbourhood + "\n");
+                        foreach (string u in users_strings)
+                            if (u != "" && u != "\n")
+                                Console.WriteLine(u);
+                            
+                        Console.WriteLine("\nНаша таблица маршрутизации ");
+                        foreach (string m in my_strings)
+                            if (m != "" && m != "\n")
+                                Console.WriteLine(m);
+                        Console.WriteLine("\n");
+
+                    }
+                    catch (Exception e)
+                    {
+                        Console.WriteLine("Наша таблица маршрутизации ");
+                        foreach (string m in my_strings)
+                            if (m != "" && m != "\n")
+                                Console.WriteLine(m);
+
+                        Console.WriteLine(name_neighbourhood + " " + e.Message);
+
+                        net = true;
+                        int count = 0;
+                        foreach (string m in my_strings)
+                        {
+                            string[] my_words = m.Split(';');
+                            if (m != "" && m != "\n")
+                                if (my_words[2] != name_neighbourhood)
+                                {
+                                    count++;
+                                    my_strings2[count - 1] = m;
+                                }
+                                else
+                                    Console.WriteLine("Маршрутизатор " + name_neighbourhood + " недоступен!");
+                            Console.WriteLine("Удаление пути из своей таблицы \n" + m);
+                        }
+                        if (count != 0)
+                            my_strings = my_strings2;
+
+                        StreamWriter f = new StreamWriter(my_address);
+                        for (int i = 0; i < my_strings.Length - 1; i++)
+                            if (my_strings[i] != null)
+                                f.WriteLine(my_strings[i]);
+                        f.Close();
+                    }
+
+                    if (!net)
+                    {
+                        List<string> was_users = new List<string>();
+                        List<string> was_my = new List<string>();
+                        foreach (string m in my_strings)
+                        {
+                            string[] my_words = m.Split(';');
+                            was_my.Add(my_words[0]);
+                        }
+                        Console.WriteLine("Таблица маршрутизатора " + name_neighbourhood + " : сравнение строк на совпадение с имеющимися.");
+                        foreach (string u in users_strings)
+                            if (u != "" && u != "\n")
+                            {
+                                Console.WriteLine("Сравниваем сеть " + u + "\n");
+                                bool add_string = false;
+                                bool ub_string = false;
+                                bool ab_string = false;
+                                if (u != "" && u != "\n")
+                                {
+                                    add_string = false;
+                                    ub_string = false;
+                                    ab_string = false;
+                                    string[] users_words = u.Split(';');
+
+                                    foreach (string m in my_strings)
+                                    {
+                                        string[] my_words = m.Split(';');
+
+                                        if (users_words[0] == my_words[0])
+                                        {
+                                            Console.WriteLine("Сеть совпадает с записью собственной таблицы маршрутизации.");
+
+                                            if ((int.Parse(users_words[4].ToString()) + 1 <= int.Parse(my_words[4].ToString())) && ((int.Parse(users_words[4]) + 1) < 16))
+                                            {
+                                                Console.WriteLine("Число хопов меньше или равно.");
+                                                Console.WriteLine("Обновление строки в собственной таблице.");
+                                                my_words[2] = name_neighbourhood;
+                                                my_words[3] = port;
+                                                my_words[4] = (int.Parse(users_words[4]) + 1).ToString();
+
+                                                add_string = true;
+                                                add.Add(my_words[0] + ';' + my_words[1] + ';' + my_words[2] + ';' + my_words[3] + ';' + my_words[4]);
+                                                was_users.Add(users_words[0]);
+                                            }
+                                            else
+                                            {
+                                                Console.WriteLine("Большее число хопов.");
+                                                Console.WriteLine("Сеть от маршрутизатора " + name_neighbourhood + " игнорируется. \n");
+                                                ab_string = true;
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ub_string = true;
+                                        }
+                                    }
+
+                                    if (ub_string && !add_string && !ab_string)
+                                    {
+                                        Console.WriteLine("Совпадений с записями не обнаружено.");
+                                        if ((int.Parse(users_words[4]) + 1) < 16)
+                                        {
+                                            Console.WriteLine("Добавление маршрута в нашу таблицу маршрутизации. \n");
+                                            add.Add(users_words[0] + ';' + users_words[1] + ';' + name_neighbourhood + ';' + port + ';' + (int.Parse(users_words[4]) + 1));
+                                            was_users.Add(users_words[0]);
+                                        }
+                                        else
+                                            Console.WriteLine("Сеть игнорируется - хопы >= 16. \n");
+                                    }
+                                }
+                            }
+                        StreamWriter f = new StreamWriter(my_address);
+                        foreach (string a in add)
+                        {
+                            if (a != "" && a != "\n")
+                                f.WriteLine(a);
+                        }
+                        foreach (string m in was_my)
+                        {
+                            if (m != "" && m != "\n")
+                            {
+                                bool my_not_was = false;
+                                foreach (string u in was_users)
+                                {
+                                    if (m == u)
+                                    {
+                                        my_not_was = true;
+                                    }
+                                }
+                                if (!my_not_was)
+                                {
+                                    foreach (string my in my_strings)
+                                    {
+                                        string[] my_words = my.Split(';');
+                                        if (m == my_words[0] && (my_words[2] != name_neighbourhood))
+                                        {
+                                            Console.WriteLine("Наш маршрут " + m + " отсутствует на маршрутизаторе " + name_neighbourhood);
+                                            Console.WriteLine("Сеть сохраняется в его таблицу.");
+                                            f.WriteLine(my_words[0] + ';' + my_words[1] + ';' + my_words[2] + ';' + my_words[3] + ';' + my_words[4]);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Console.WriteLine("\n");
+                        f.Close();
+                        add.Clear();
+                    }
+                }
+            }
+            Console.WriteLine("До обновления: \n");
+            Console.ReadKey();
+
+            for (int i = 30; i > 0; i--)
+            {
+                Thread.Sleep(1000);
+                Console.WriteLine(i + " ");
+                Console.SetCursorPosition(Console.CursorLeft, Console.CursorTop - 1);
+            }
+            Console.Clear();
+            Main();
+        }
+    }
+
+}
